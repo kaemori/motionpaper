@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Comment=Launches the MotionPaper daemon process
+Name=MotionPaper Daemon
+Exec=__MOTIONPAPER_DAEMON_EXEC__
+Icon=__MOTIONPAPER_ICON__
+Terminal=false
+Categories=Utility;
+NoDisplay=true

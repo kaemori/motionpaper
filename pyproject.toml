@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "motionpaper"
+version = "1.23.2"
+description = "Tkinter wallpaper browser and daemon launcher for linux-wallpaperengine"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "Pillow>=10.0.0",
+  "rapidfuzz>=3.0.0",
+  "watchdog>=4.0.0",
+]
+
+[project.scripts]
+motionpaper = "gui:main"
+motionpaper-daemon = "main:main"
+motionpaper-install = "motionpaper.installer:main"
+
+[tool.setuptools]
+packages = ["motionpaper"]
+py-modules = ["gui", "main"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+motionpaper = ["resources/*.png", "resources/*.json"]

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Comment=Wallpaper browser and launcher for linux-wallpaperengine
+Name=MotionPaper
+Exec=__MOTIONPAPER_EXEC__
+Icon=__MOTIONPAPER_ICON__
+Terminal=false
+Categories=Graphics;Utility;
+StartupNotify=true
