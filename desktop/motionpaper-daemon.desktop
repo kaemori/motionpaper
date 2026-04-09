@@ -7,4 +7,4 @@ Exec=__MOTIONPAPER_DAEMON_EXEC__
 Icon=__MOTIONPAPER_ICON__
 Terminal=false
 Categories=Utility;
-NoDisplay=true
+StartupNotify=true

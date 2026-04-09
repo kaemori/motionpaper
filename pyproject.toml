@@ -18,6 +18,7 @@ dependencies = [
 motionpaper = "gui:main"
 motionpaper-daemon = "main:main"
 motionpaper-install = "motionpaper.installer:main"
+motionpaper-uninstall = "motionpaper.uninstaller:main"
 
 [tool.setuptools]
 packages = ["motionpaper"]

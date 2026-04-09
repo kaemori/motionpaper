@@ -28,6 +28,8 @@ pipx install "git+https://github.com/kaemori/motionpaper.git"
 motionpaper-install
 ```
 
+This installs both launcher apps: `motionpaper` and `motionpaper-daemon`.
+
 4. Launch:
 
 ```bash
@@ -53,6 +55,7 @@ curl -fsSL https://raw.githubusercontent.com/kaemori/motionpaper/main/install.sh
 - `motionpaper`: launch the GUI
 - `motionpaper-daemon`: launch the daemon only
 - `motionpaper-install`: install desktop entries under `~/.local/share/applications`
+- `motionpaper-uninstall`: remove desktop entries/icon and stop daemon
 
 ## Installed Files
 
@@ -66,22 +69,28 @@ When installed with `pipx`, MotionPaper is installed as a user app (not system-w
 
 ## Uninstall
 
-1. Uninstall package and commands:
+1. Remove desktop integration and stop daemon:
+
+```bash
+motionpaper-uninstall
+```
+
+2. Remove config too (optional):
+
+```bash
+motionpaper-uninstall --purge-config
+```
+
+3. Uninstall package and commands:
 
 ```bash
 pipx uninstall motionpaper
 ```
 
-2. Remove desktop files and icon:
+4. Wrapper script (optional, does both cleanup + pipx uninstall):
 
 ```bash
 ./uninstaller.sh
-```
-
-3. Remove config too (optional):
-
-```bash
-./uninstaller.sh --purge-config
 ```
 
 ## Local Development
@@ -107,6 +116,7 @@ motionpaper/
 │   ├── daemon_runtime.py         # Daemon implementation
 │   ├── gui_helpers.py            # Shared UI utility functions
 │   ├── installer.py              # pipx-friendly desktop entry installer
+│   ├── uninstaller.py            # pipx-friendly desktop integration cleanup
 │   ├── romanization.py           # JP/CN/KR title romanization
 │   ├── wallpaper_library.py      # Workshop wallpaper metadata loader
 │   └── resources/

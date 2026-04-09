@@ -49,7 +49,14 @@ def _install_icon(icon_name: str) -> str:
 
 def install_desktop_entries() -> None:
     applications_dir = Path.home() / ".local" / "share" / "applications"
+    autostart_dir = Path.home() / ".config" / "autostart"
     applications_dir.mkdir(parents=True, exist_ok=True)
+
+    # Clean up legacy entry naming to avoid duplicate daemon launchers.
+    (applications_dir / "motionpaperdaemon.desktop").unlink(missing_ok=True)
+    (autostart_dir / "motionpaperdaemon.desktop").unlink(missing_ok=True)
+    # Explicitly remove daemon autostart entries; daemon is launcher-only.
+    (autostart_dir / "motionpaper-daemon.desktop").unlink(missing_ok=True)
 
     gui_exec = shutil.which("motionpaper") or "motionpaper"
     daemon_exec = shutil.which("motionpaper-daemon") or "motionpaper-daemon"
@@ -68,7 +75,6 @@ def install_desktop_entries() -> None:
         exec_cmd=daemon_exec,
         icon=icon_value,
         categories="Utility;",
-        no_display=True,
     )
 
     gui_path = applications_dir / "motionpaper.desktop"

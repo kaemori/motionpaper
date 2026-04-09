@@ -21,9 +21,27 @@ DESKTOP_FILES=(
 	"motionpaper-daemon.desktop"
 	"motionpaperdaemon.desktop"
 )
-ICON_FILE="$HOME/.local/share/icons/hicolor/256x256/apps/motionpaper.png"
-PID_FILE="/tmp/motionpaper-daemon.pid"
-LOG_FILE="/tmp/motionpaper-daemon.log"
+
+if command -v motionpaper-uninstall >/dev/null 2>&1; then
+	echo "Running motionpaper-uninstall cleanup"
+	if [[ "$PURGE_CONFIG" -eq 1 ]]; then
+		motionpaper-uninstall --purge-config
+	else
+		motionpaper-uninstall
+	fi
+else
+	echo "motionpaper-uninstall command not found; using shell fallback cleanup"
+	for desktop_file in "${DESKTOP_FILES[@]}"; do
+		rm -f "$APPLICATIONS_DIR/$desktop_file"
+		rm -f "$AUTOSTART_DIR/$desktop_file"
+	done
+	if command -v update-desktop-database >/dev/null 2>&1; then
+		update-desktop-database "$APPLICATIONS_DIR" >/dev/null 2>&1 || true
+	fi
+	if [[ "$PURGE_CONFIG" -eq 1 ]]; then
+		rm -rf "$HOME/.config/motionpaper"
+	fi
+fi
 
 if command -v pipx >/dev/null 2>&1; then
 	if pipx list --short 2>/dev/null | grep -qx "motionpaper"; then
@@ -36,33 +54,4 @@ else
 	echo "pipx not found; skipping pipx uninstall"
 fi
 
-if [[ -f "$PID_FILE" ]]; then
-	pid="$(cat "$PID_FILE" 2>/dev/null || true)"
-	if [[ -n "$pid" ]] && kill -0 "$pid" >/dev/null 2>&1; then
-		echo "Stopping daemon pid $pid"
-		kill "$pid" >/dev/null 2>&1 || true
-	fi
-	rm -f "$PID_FILE"
-fi
-
-rm -f "$LOG_FILE"
-
-for desktop_file in "${DESKTOP_FILES[@]}"; do
-	rm -f "$APPLICATIONS_DIR/$desktop_file"
-	rm -f "$AUTOSTART_DIR/$desktop_file"
-done
-
-if command -v update-desktop-database >/dev/null 2>&1; then
-	update-desktop-database "$APPLICATIONS_DIR" >/dev/null 2>&1 || true
-fi
-
-rm -f "$ICON_FILE"
-
-if [[ "$PURGE_CONFIG" -eq 1 ]]; then
-	echo "Removing config directory: $HOME/.config/motionpaper"
-	rm -rf "$HOME/.config/motionpaper"
-else
-	echo "Keeping config directory: $HOME/.config/motionpaper"
-fi
-
-echo "MotionPaper uninstall complete."
+echo "MotionPaper uninstall workflow complete."
