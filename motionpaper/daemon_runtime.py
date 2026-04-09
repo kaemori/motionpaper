@@ -92,7 +92,7 @@ def _apply_engine_options(command, config, force_silent=False):
 def _build_creation_command(wpid, config, force_silent=False):
     command = [
         "linux-wallpaperengine",
-        "suo" "--screenshot",
+        "--screenshot",
         str(SCREENSHOT_PATH),
         "--screen-root",
         DISPLAY,
