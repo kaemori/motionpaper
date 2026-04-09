@@ -183,28 +183,148 @@ def _create_black_image():
 
 
 def _set_wallpaper(file_path):
-    if shutil.which("caelestia"):
-        subprocess.run(["caelestia", "wallpaper", "-f", str(file_path)], check=True)
-        subprocess.run(["caelestia", "scheme", "set", "--mode", "dark"], check=True)
-        return
-
-    if not shutil.which("hyprctl"):
-        raise RuntimeError("neither caelestia nor hyprctl was found")
-
     path = str(file_path)
-    subprocess.run(["hyprctl", "hyprpaper", "preload", path], check=True)
-    subprocess.run(["hyprctl", "hyprpaper", "wallpaper", f",{path}"], check=True)
+
+    successes = []
+
+    def _try_cmd(cmd):
+        try:
+            result = subprocess.run(cmd, check=False)
+            if result.returncode == 0:
+                return True
+        except Exception as e:
+            logging.debug(f"backend command failed: {cmd}: {e}")
+        return False
+
+    # caelestia
+    if shutil.which("caelestia"):
+        try:
+            if _try_cmd(["caelestia", "wallpaper", "-f", path]):
+                _try_cmd(
+                    ["caelestia", "scheme", "set", "--mode", "dark"]
+                )  # best-effort
+                successes.append("caelestia")
+        except Exception:
+            logging.exception("caelestia set failed")
+
+    # swww
+    if shutil.which("swww"):
+        try:
+            if _try_cmd(["swww", "img", path, "--transition-steps", "255"]) or _try_cmd(
+                ["swww", "img", path]
+            ):
+                successes.append("swww")
+        except Exception:
+            logging.exception("swww set failed")
+
+    # awww
+    if shutil.which("awww"):
+        try:
+            if _try_cmd(["awww", "img", path]):
+                successes.append("awww")
+        except Exception:
+            logging.exception("awww set failed")
+
+    # hyprctl / hyprpaper
+    if shutil.which("hyprctl"):
+        try:
+            if _try_cmd(["hyprctl", "hyprpaper", "preload", path]):
+                if _try_cmd(["hyprctl", "hyprpaper", "wallpaper", f",{path}"]):
+                    successes.append("hyprctl")
+        except Exception:
+            logging.exception("hyprctl set failed")
+
+    if not successes:
+        logging.warning("no supported wallpaper backend found to set wallpaper")
+        _notify(
+            "motionpaper", "static wallpaper not set; unsupported wallpaper backend"
+        )
+    else:
+        logging.info(f"wallpaper set via backends: {', '.join(successes)}")
 
 
 def _reset_wallpaper_backend():
+    successes = []
+
+    def _try_cmd(cmd):
+        try:
+            result = subprocess.run(cmd, check=False)
+            if result.returncode == 0:
+                return True
+        except Exception as e:
+            logging.debug(f"reset backend command failed: {cmd}: {e}")
+        return False
+
+    # caelestia
     if shutil.which("caelestia"):
-        subprocess.run(["caelestia", "wallpaper", "-r"], check=True)
-        return
+        try:
+            if _try_cmd(["caelestia", "wallpaper", "-r"]):
+                successes.append("caelestia")
+        except Exception:
+            logging.exception("caelestia reset failed")
 
-    if not shutil.which("hyprctl"):
-        raise RuntimeError("neither caelestia nor hyprctl was found")
+    # swww
+    if shutil.which("swww"):
+        try:
+            if _try_cmd(["swww", "img", "clear"]) or _try_cmd(["swww", "img", "reset"]):
+                successes.append("swww")
+        except Exception:
+            logging.exception("swww reset failed")
 
-    subprocess.run(["hyprctl", "hyprpaper", "unload", "all"], check=True)
+    # awww
+    if shutil.which("awww"):
+        try:
+            if _try_cmd(["awww", "reset"]) or _try_cmd(["awww", "clear"]):
+                successes.append("awww")
+        except Exception:
+            logging.exception("awww reset failed")
+
+    # hyprctl
+    if shutil.which("hyprctl"):
+        try:
+            if _try_cmd(["hyprctl", "hyprpaper", "unload", "all"]):
+                successes.append("hyprctl")
+        except Exception:
+            logging.exception("hyprctl reset failed")
+
+    if not successes:
+        logging.warning("no supported wallpaper backend found to reset wallpaper")
+    else:
+        logging.info(f"wallpaper reset via backends: {', '.join(successes)}")
+
+
+def _notify(title: str, message: str):
+    try:
+        # Try desktop notification first (if available)
+        if shutil.which("notify-send"):
+            subprocess.run(["notify-send", title, message], check=False)
+        else:
+            logging.info(f"notify: {title} - {message}")
+    except Exception as e:
+        logging.debug(f"notification failed: {e}")
+
+    # Also write a small toast file into the config dir so the GUI can show an in-app toast
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        toast_path = CONFIG_DIR / "toast.json"
+        payload = {
+            "title": title,
+            "message": message,
+            "ts": time.time(),
+            "shown": False,
+        }
+        # atomic-ish write
+        tmp = toast_path.with_suffix(".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(payload, f)
+        try:
+            tmp.replace(toast_path)
+        except Exception:
+            # fallback to rename
+            os.replace(str(tmp), str(toast_path))
+        logging.info(f"wrote gui toast to {toast_path}")
+    except Exception as e:
+        logging.debug(f"failed to write gui toast file: {e}")
 
 
 def kill_all_wallpaper_engines():
@@ -296,8 +416,11 @@ def start_wallpaper_engine(wpid):
         logging.info("setting static wallpaper")
         _reset_wallpaper_backend()
         _set_wallpaper(SCREENSHOT_PATH)
-
         logging.info("wallpaper update complete!!")
+        try:
+            _notify("motionpaper", "Wallpaper set")
+        except Exception:
+            pass
         logging.info("recreating current process...")
         kill_existing_wallpaper()
         logging.info("current process killed, recreating...")
@@ -311,6 +434,10 @@ def start_wallpaper_engine(wpid):
             _set_wallpaper(TEMP_WALLPAPER_PATH)
         except Exception as fallback_error:
             logging.warning(f"failed to set fallback wallpaper: {fallback_error}")
+        try:
+            _notify("motionpaper", "Static wallpaper not set; using fallback")
+        except Exception:
+            pass
 
 
 def set_static_wallpaper(wpid):
@@ -339,11 +466,19 @@ def set_static_wallpaper(wpid):
                 _reset_wallpaper_backend()
                 _set_wallpaper(SCREENSHOT_PATH)
                 logging.info("static wallpaper set")
+                try:
+                    _notify("motionpaper", "Static wallpaper set")
+                except Exception:
+                    pass
             except Exception as e:
                 logging.warning(
                     f"failed to set captured static wallpaper: {e}; using fallback image"
                 )
                 _set_wallpaper(TEMP_WALLPAPER_PATH)
+                try:
+                    _notify("motionpaper", "Static wallpaper set (fallback)")
+                except Exception:
+                    pass
         else:
             logging.warning("screenshot not ready; using fallback image")
             _set_wallpaper(TEMP_WALLPAPER_PATH)

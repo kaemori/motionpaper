@@ -3,11 +3,13 @@ import os
 import subprocess
 import sys
 import threading
+import json
 
 from PIL import Image, ImageTk, ImageSequence
 from rapidfuzz import fuzz
 from motionpaper.config_store import load_config, load_themes, save_config
 from motionpaper.constants import PROJECT_ROOT, VERSION
+from motionpaper.constants import CONFIG_DIR
 from motionpaper.daemon_control import (
     is_daemon_running,
     kill_daemon,
@@ -801,6 +803,7 @@ class App(tk.Tk):
         self.button_states = {}
         self.active_toasts = []
         self.toast_fade_jobs = {}
+        self._last_toast_ts = 0
         self.previewed_wpid = None
         self.applied_wpid = self.config.get("wpid")
         self.refreshing_wallpapers = False
@@ -825,6 +828,54 @@ class App(tk.Tk):
         )
         self.loading_label.pack(pady=50)
         threading.Thread(target=self.load_wallpapers_async, daemon=True).start()
+        # start polling for daemon-to-gui toasts (written to CONFIG_DIR/toast.json)
+        self.after(1000, self._poll_daemon_toasts)
+
+    def _poll_daemon_toasts(self):
+        try:
+            toast_file = CONFIG_DIR / "toast.json"
+            if toast_file.exists():
+                try:
+                    with open(toast_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    ts = float(data.get("ts") or 0)
+                    shown = bool(data.get("shown"))
+                    # if already shown, just update last ts and skip
+                    if shown:
+                        if ts and ts > (self._last_toast_ts or 0):
+                            self._last_toast_ts = ts
+                    else:
+                        # only show if newer than last
+                        if ts and ts > (self._last_toast_ts or 0):
+                            msg = data.get("message") or data.get("title") or ""
+                            if msg:
+                                try:
+                                    self.show_toast(msg)
+                                    self._last_toast_ts = ts
+                                except Exception:
+                                    pass
+                            # mark as shown so GUI restarts won't re-show
+                            try:
+                                data["shown"] = True
+                                tmp = toast_file.with_suffix(".tmp")
+                                with open(tmp, "w", encoding="utf-8") as tf:
+                                    json.dump(data, tf)
+                                try:
+                                    tmp.replace(toast_file)
+                                except Exception:
+                                    os.replace(str(tmp), str(toast_file))
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        finally:
+            # poll again
+            try:
+                self.after(1000, self._poll_daemon_toasts)
+            except Exception:
+                pass
 
     def _create_top_bar(self):
         width = 900
