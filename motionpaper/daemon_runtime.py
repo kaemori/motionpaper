@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 import os
 import shutil
@@ -22,14 +23,6 @@ from .constants import (
     TEMP_WALLPAPER_PATH,
 )
 
-try:
-    from screeninfo import get_monitors
-
-    _monitors = get_monitors()
-    DISPLAY = _monitors[0].name if _monitors else ":0"
-except Exception:
-    DISPLAY = ":0"
-
 
 logging.basicConfig(
     filename=str(DAEMON_LOG_PATH),
@@ -37,11 +30,85 @@ logging.basicConfig(
     format="%(asctime)s - %(message)s",
 )
 
+
+def _detect_screen_root():
+    env_override = os.getenv("MOTIONPAPER_SCREEN_ROOT", "").strip()
+    if env_override:
+        logging.info(
+            f"using MOTIONPAPER_SCREEN_ROOT override for linux-wallpaperengine: {env_override}"
+        )
+        return env_override
+
+    hyprctl = shutil.which("hyprctl")
+    if hyprctl:
+        try:
+            result = subprocess.run(
+                [hyprctl, "-j", "monitors"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode == 0:
+                monitors = json.loads(result.stdout or "[]")
+                if isinstance(monitors, list) and monitors:
+                    focused = next(
+                        (monitor for monitor in monitors if monitor.get("focused")),
+                        monitors[0],
+                    )
+                    output_name = str(focused.get("name", "")).strip()
+                    if output_name:
+                        logging.info(f"detected screen-root via hyprctl: {output_name}")
+                        return output_name
+        except Exception as e:
+            logging.warning(f"failed to detect outputs from hyprctl: {e}")
+
+    xrandr = shutil.which("xrandr")
+    if xrandr:
+        try:
+            result = subprocess.run(
+                [xrandr, "--query"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode == 0:
+                for line in result.stdout.splitlines():
+                    if " connected" in line:
+                        output_name = line.split()[0].strip()
+                        if output_name:
+                            logging.info(
+                                f"detected screen-root via xrandr: {output_name}"
+                            )
+                            return output_name
+        except Exception as e:
+            logging.warning(f"failed to detect outputs from xrandr: {e}")
+
+    try:
+        from screeninfo import get_monitors
+
+        monitors = get_monitors()
+        if monitors:
+            output_name = str(getattr(monitors[0], "name", "") or "").strip()
+            if output_name:
+                logging.info(f"detected screen-root via screeninfo: {output_name}")
+                return output_name
+    except Exception as e:
+        logging.warning(f"failed to detect monitors via screeninfo: {e}")
+
+    logging.warning(
+        "could not detect monitor output name; running without --screen-root (set MOTIONPAPER_SCREEN_ROOT to override)"
+    )
+    return None
+
+
+SCREEN_ROOT = _detect_screen_root()
+
 current_process = None
 
 ENGINE_RELEVANT_KEYS = (
     "wpid",
     "scaling",
+    "screen_root",
     "fps",
     "fullscreen_pause",
     "mute",
@@ -94,11 +161,13 @@ def _build_creation_command(wpid, config, force_silent=False):
         "linux-wallpaperengine",
         "--screenshot",
         str(SCREENSHOT_PATH),
-        "--screen-root",
-        DISPLAY,
         "--bg",
         str(wpid),
     ]
+
+    screen_root = str(config.get("screen_root") or SCREEN_ROOT or "").strip()
+    if screen_root:
+        command.extend(["--screen-root", screen_root])
 
     scaling = config.get("scaling", "default")
     if scaling and scaling != "default":
@@ -215,10 +284,13 @@ def start_wallpaper_engine(wpid):
 
     current_process = subprocess.Popen(capture_command, start_new_session=True)
 
-    logging.info("waiting for screenshot to be created...")
-    time.sleep(5)
-
     try:
+        logging.info("waiting for screenshot to be created...")
+        if not _wait_for_screenshot(SCREENSHOT_PATH, timeout=15):
+            raise RuntimeError(
+                "linux-wallpaperengine did not produce a screenshot in time"
+            )
+
         logging.info("setting static wallpaper")
         _reset_wallpaper_backend()
         _set_wallpaper(SCREENSHOT_PATH)
@@ -233,7 +305,10 @@ def start_wallpaper_engine(wpid):
     except Exception as e:
         logging.warning(f"failed to set wallpaper: {e}")
         logging.warning("using black image as fallback wallpaper")
-        _set_wallpaper(TEMP_WALLPAPER_PATH)
+        try:
+            _set_wallpaper(TEMP_WALLPAPER_PATH)
+        except Exception as fallback_error:
+            logging.warning(f"failed to set fallback wallpaper: {fallback_error}")
 
 
 def set_static_wallpaper(wpid):
@@ -258,9 +333,15 @@ def set_static_wallpaper(wpid):
         logging.info("waiting for screenshot to be created...")
         if _wait_for_screenshot(SCREENSHOT_PATH, timeout=15):
             logging.info("setting static wallpaper")
-            _reset_wallpaper_backend()
-            _set_wallpaper(SCREENSHOT_PATH)
-            logging.info("static wallpaper set")
+            try:
+                _reset_wallpaper_backend()
+                _set_wallpaper(SCREENSHOT_PATH)
+                logging.info("static wallpaper set")
+            except Exception as e:
+                logging.warning(
+                    f"failed to set captured static wallpaper: {e}; using fallback image"
+                )
+                _set_wallpaper(TEMP_WALLPAPER_PATH)
         else:
             logging.warning("screenshot not ready; using fallback image")
             _set_wallpaper(TEMP_WALLPAPER_PATH)
