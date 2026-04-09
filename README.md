@@ -54,6 +54,36 @@ curl -fsSL https://raw.githubusercontent.com/kaemori/motionpaper/main/install.sh
 - `motionpaper-daemon`: launch the daemon only
 - `motionpaper-install`: install desktop entries under `~/.local/share/applications`
 
+## Installed Files
+
+When installed with `pipx`, MotionPaper is installed as a user app (not system-wide):
+
+- Executables are exposed in `~/.local/bin` (for example `motionpaper`)
+- App venv lives under `~/.local/pipx/venvs/motionpaper`
+- Desktop entries are written to `~/.local/share/applications/motionpaper.desktop` and `~/.local/share/applications/motionpaper-daemon.desktop`
+- App icon is copied to `~/.local/share/icons/hicolor/256x256/apps/motionpaper.png`
+- Runtime config is stored in `~/.config/motionpaper`
+
+## Uninstall
+
+1. Uninstall package and commands:
+
+```bash
+pipx uninstall motionpaper
+```
+
+2. Remove desktop files and icon:
+
+```bash
+./uninstaller.sh
+```
+
+3. Remove config too (optional):
+
+```bash
+./uninstaller.sh --purge-config
+```
+
 ## Local Development
 
 If you are developing from source, you can still run the compatibility scripts:
@@ -86,6 +116,7 @@ motionpaper/
 ├── main.py                       # Daemon entrypoint module
 ├── pyproject.toml                # Packaging metadata and entry points
 ├── install.sh                    # Curl/bootstrap installer
+├── uninstaller.sh                # Uninstalls pipx package and local desktop integration
 ├── scripts/
 │   ├── launch_gui.sh
 │   ├── launch_daemon.sh
