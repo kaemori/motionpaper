@@ -178,7 +178,7 @@ def _build_creation_command(wpid, config, force_silent=False, set_static=False):
     cmd = _apply_engine_options(command, config, force_silent=force_silent)
 
     if set_static:
-        static_fps = 20
+        static_fps = 5
         if "--fps" in cmd:
             fps_index = cmd.index("--fps")
             cmd[fps_index + 1] = str(static_fps)
