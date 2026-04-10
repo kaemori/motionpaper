@@ -161,7 +161,7 @@ def _build_creation_command(wpid, config, force_silent=False, set_static=False):
     command = [
         "linux-wallpaperengine",
         "--screenshot-delay",
-        str(5),
+        str(15),
         "--screenshot",
         str(SCREENSHOT_PATH),
         "--bg",
