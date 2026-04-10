@@ -164,7 +164,7 @@ def _build_creation_command(wpid, config, force_silent=False):
         "--screenshot",
         str(SCREENSHOT_PATH),
         "--fps",
-        int(20),  # for some reason the most stable for screenshot
+        str(20),  # for some reason the most stable for screenshot
         "--bg",
         str(wpid),
     ]
