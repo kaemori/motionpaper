@@ -265,12 +265,12 @@ def _reset_wallpaper_backend():
         return False
 
     # caelestia
-    if shutil.which("caelestia"):
-        try:
-            if _try_cmd(["caelestia", "wallpaper", "-r"]):
-                successes.append("caelestia")
-        except Exception:
-            logging.exception("caelestia reset failed")
+    # if shutil.which("caelestia"):
+    #     try:
+    #         if _try_cmd(["caelestia", "wallpaper", "-r"]):
+    #             successes.append("caelestia")
+    #     except Exception:
+    #         logging.exception("caelestia reset failed")
 
     # swww
     if shutil.which("swww"):
