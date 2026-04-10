@@ -103,6 +103,11 @@ def _detect_screen_root():
 
 SCREEN_ROOT = _detect_screen_root()
 
+CAELESTIA_RESET_PATH = "/home/fern/.config/motionpaper"
+SECONDARY_TEMP_WALLPAPER_PATH = TEMP_WALLPAPER_PATH.with_name(
+    f"{TEMP_WALLPAPER_PATH.stem}_2{TEMP_WALLPAPER_PATH.suffix}"
+)
+
 current_process = None
 
 ENGINE_RELEVANT_KEYS = (
@@ -265,12 +270,12 @@ def _reset_wallpaper_backend():
         return False
 
     # caelestia
-    # if shutil.which("caelestia"):
-    #     try:
-    #         if _try_cmd(["caelestia", "wallpaper", "-r"]):
-    #             successes.append("caelestia")
-    #     except Exception:
-    #         logging.exception("caelestia reset failed")
+    if shutil.which("caelestia"):
+        try:
+            if _try_cmd(["caelestia", "wallpaper", "-r", CAELESTIA_RESET_PATH]):
+                successes.append("caelestia")
+        except Exception:
+            logging.exception("caelestia reset failed")
 
     # swww
     if shutil.which("swww"):
@@ -354,6 +359,11 @@ def _try_delete(path: Path):
         logging.warning(f"failed to delete {path}: {e}")
 
 
+def _cleanup_temp_wallpapers():
+    _try_delete(TEMP_WALLPAPER_PATH)
+    _try_delete(SECONDARY_TEMP_WALLPAPER_PATH)
+
+
 def _wait_for_screenshot(path: Path, timeout=15):
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -392,7 +402,10 @@ def _terminate_process_group(process, name):
 
 
 def _prepare_capture_state():
-    _create_black_image().save(TEMP_WALLPAPER_PATH, format="png")
+    _cleanup_temp_wallpapers()
+    black = _create_black_image()
+    black.save(TEMP_WALLPAPER_PATH, format="png")
+    black.save(SECONDARY_TEMP_WALLPAPER_PATH, format="png")
     _set_wallpaper(TEMP_WALLPAPER_PATH)
     _try_delete(SCREENSHOT_PATH)
 
@@ -452,7 +465,6 @@ def start_wallpaper_engine(wpid):
         logging.info("current process killed, recreating...")
         current_process = subprocess.Popen(creation_command, start_new_session=True)
         logging.info(f"new wallpaper process started with pid: {current_process.pid}")
-        _try_delete(TEMP_WALLPAPER_PATH)
     except Exception as e:
         logging.warning(f"failed to set wallpaper: {e}")
         logging.warning("using black image as fallback wallpaper")
@@ -464,6 +476,8 @@ def start_wallpaper_engine(wpid):
             _notify("motionpaper", "Static wallpaper not set; using fallback")
         except Exception:
             pass
+    finally:
+        _cleanup_temp_wallpapers()
 
 
 def set_static_wallpaper(wpid):
@@ -503,7 +517,7 @@ def set_static_wallpaper(wpid):
             logging.warning("screenshot not ready; using fallback image")
             _set_wallpaper(TEMP_WALLPAPER_PATH)
     finally:
-        _try_delete(TEMP_WALLPAPER_PATH)
+        _cleanup_temp_wallpapers()
 
 
 def cleanup_and_exit(signum=None, frame=None):
