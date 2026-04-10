@@ -156,15 +156,13 @@ def _apply_engine_options(command, config, force_silent=False):
     return command
 
 
-def _build_creation_command(wpid, config, force_silent=False):
+def _build_creation_command(wpid, config, force_silent=False, set_static=False):
     command = [
         "linux-wallpaperengine",
         "--screenshot-delay",
         str(60 * 1),  # 1 second
         "--screenshot",
         str(SCREENSHOT_PATH),
-        "--fps",
-        str(20),  # for some reason the most stable for screenshot
         "--bg",
         str(wpid),
     ]
@@ -177,7 +175,15 @@ def _build_creation_command(wpid, config, force_silent=False):
     if scaling and scaling != "default":
         command.extend(["--scaling", scaling])
 
-    return _apply_engine_options(command, config, force_silent=force_silent)
+    cmd = _apply_engine_options(command, config, force_silent=force_silent)
+    if set_static:
+        static_fps = 20
+        if "--fps" in cmd:
+            fps_index = cmd.index("--fps")
+            cmd[fps_index + 1] = str(static_fps)
+        else:
+            cmd.extend(["--fps", str(static_fps)])
+    return cmd
 
 
 def _create_black_image():
@@ -297,16 +303,6 @@ def _reset_wallpaper_backend():
 
 def _notify(title: str, message: str):
     try:
-        # Try desktop notification first (if available)
-        if shutil.which("notify-send"):
-            subprocess.run(["notify-send", title, message], check=False)
-        else:
-            logging.info(f"notify: {title} - {message}")
-    except Exception as e:
-        logging.debug(f"notification failed: {e}")
-
-    # Also write a small toast file into the config dir so the GUI can show an in-app toast
-    try:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         toast_path = CONFIG_DIR / "toast.json"
         payload = {
@@ -344,22 +340,7 @@ def kill_existing_wallpaper():
 
     if current_process and current_process.poll() is None:
         logging.info(f"killing existing wallpaper process (pid: {current_process.pid})")
-        try:
-            os.killpg(os.getpgid(current_process.pid), signal.SIGTERM)
-            current_process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            logging.warning("process didn't die nicely, force killing")
-            try:
-                os.killpg(os.getpgid(current_process.pid), signal.SIGKILL)
-            except Exception as e:
-                logging.warning(f"killpg failed: {e}, trying regular kill")
-                current_process.kill()
-        except Exception as e:
-            logging.warning(f"error killing process: {e}")
-            try:
-                current_process.kill()
-            except Exception:
-                pass
+        _terminate_process_group(current_process, "wallpaper process")
         current_process = None
 
 
@@ -384,6 +365,48 @@ def _wait_for_screenshot(path: Path, timeout=15):
     return False
 
 
+def _terminate_process_group(process, name):
+    if not process or process.poll() is not None:
+        return
+
+    try:
+        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        logging.warning(f"{name} didn't die nicely, force killing")
+        try:
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+        except Exception as e:
+            logging.warning(f"killpg failed for {name}: {e}, trying regular kill")
+            try:
+                process.kill()
+            except Exception:
+                pass
+    except Exception as e:
+        logging.warning(f"error killing {name}: {e}")
+        try:
+            process.kill()
+        except Exception:
+            pass
+
+
+def _prepare_capture_state():
+    _create_black_image().save(TEMP_WALLPAPER_PATH, format="png")
+    _set_wallpaper(TEMP_WALLPAPER_PATH)
+    _try_delete(SCREENSHOT_PATH)
+
+
+def _capture_screenshot(command, timeout=15):
+    logging.info("starting static wallpaper capture")
+    capture_process = subprocess.Popen(command, start_new_session=True)
+
+    try:
+        logging.info("waiting for screenshot to be created...")
+        return _wait_for_screenshot(SCREENSHOT_PATH, timeout=timeout)
+    finally:
+        _terminate_process_group(capture_process, "capture process")
+
+
 def start_wallpaper_engine(wpid):
     global current_process
 
@@ -402,15 +425,10 @@ def start_wallpaper_engine(wpid):
 
     logging.info(f"full command: {' '.join(creation_command)}")
 
-    _create_black_image().save(TEMP_WALLPAPER_PATH, format="png")
-    _set_wallpaper(TEMP_WALLPAPER_PATH)
-    _try_delete(SCREENSHOT_PATH)
-
-    current_process = subprocess.Popen(capture_command, start_new_session=True)
+    _prepare_capture_state()
 
     try:
-        logging.info("waiting for screenshot to be created...")
-        if not _wait_for_screenshot(SCREENSHOT_PATH, timeout=15):
+        if not _capture_screenshot(capture_command, timeout=15):
             raise RuntimeError(
                 "linux-wallpaperengine did not produce a screenshot in time"
             )
@@ -451,18 +469,14 @@ def set_static_wallpaper(wpid):
     kill_existing_wallpaper()
 
     config = load_config()
-    creation_command = _build_creation_command(wpid, config, force_silent=True)
+    creation_command = _build_creation_command(
+        wpid, config, force_silent=True, set_static=True
+    )
 
-    _create_black_image().save(TEMP_WALLPAPER_PATH, format="png")
-    _set_wallpaper(TEMP_WALLPAPER_PATH)
-    _try_delete(SCREENSHOT_PATH)
-
-    logging.info("starting static wallpaper capture")
-    capture_process = subprocess.Popen(creation_command, start_new_session=True)
+    _prepare_capture_state()
 
     try:
-        logging.info("waiting for screenshot to be created...")
-        if _wait_for_screenshot(SCREENSHOT_PATH, timeout=15):
+        if _capture_screenshot(creation_command, timeout=15):
             logging.info("setting static wallpaper")
             try:
                 _reset_wallpaper_backend()
@@ -485,18 +499,6 @@ def set_static_wallpaper(wpid):
             logging.warning("screenshot not ready; using fallback image")
             _set_wallpaper(TEMP_WALLPAPER_PATH)
     finally:
-        if capture_process.poll() is None:
-            try:
-                os.killpg(os.getpgid(capture_process.pid), signal.SIGTERM)
-                capture_process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                try:
-                    os.killpg(os.getpgid(capture_process.pid), signal.SIGKILL)
-                except Exception as e:
-                    logging.warning(f"killpg failed: {e}")
-            except Exception as e:
-                logging.warning(f"error killing capture process: {e}")
-
         _try_delete(TEMP_WALLPAPER_PATH)
 
 
