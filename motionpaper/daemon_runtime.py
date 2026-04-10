@@ -398,6 +398,10 @@ def _prepare_capture_state():
 
 
 def _capture_screenshot(command, timeout=15):
+    # Keep ordering strict for visual transition:
+    # 1) set temp wallpaper, 2) start capture instance, 3) stop capture instance.
+    _prepare_capture_state()
+
     logging.info("starting static wallpaper capture")
     capture_process = subprocess.Popen(command, start_new_session=True)
 
@@ -405,6 +409,7 @@ def _capture_screenshot(command, timeout=15):
         logging.info("waiting for screenshot to be created...")
         return _wait_for_screenshot(SCREENSHOT_PATH, timeout=timeout)
     finally:
+        logging.info("stopping static wallpaper capture instance")
         _terminate_process_group(capture_process, "capture process")
 
 
@@ -428,15 +433,13 @@ def start_wallpaper_engine(wpid):
 
     logging.info(f"full command: {' '.join(creation_command)}")
 
-    _prepare_capture_state()
-
     try:
         if not _capture_screenshot(capture_command, timeout=15):
             raise RuntimeError(
                 "linux-wallpaperengine did not produce a screenshot in time"
             )
 
-        logging.info("setting static wallpaper")
+        logging.info("capture instance stopped; setting static wallpaper")
         _reset_wallpaper_backend()
         _set_wallpaper(SCREENSHOT_PATH)
         logging.info("wallpaper update complete!!")
@@ -476,11 +479,9 @@ def set_static_wallpaper(wpid):
         wpid, config, force_silent=True, set_static=True
     )
 
-    _prepare_capture_state()
-
     try:
         if _capture_screenshot(creation_command, timeout=15):
-            logging.info("setting static wallpaper")
+            logging.info("capture instance stopped; setting static wallpaper")
             try:
                 _reset_wallpaper_backend()
                 _set_wallpaper(SCREENSHOT_PATH)
