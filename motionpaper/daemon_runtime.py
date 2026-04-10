@@ -176,6 +176,7 @@ def _build_creation_command(wpid, config, force_silent=False, set_static=False):
         command.extend(["--scaling", scaling])
 
     cmd = _apply_engine_options(command, config, force_silent=force_silent)
+
     if set_static:
         static_fps = 20
         if "--fps" in cmd:
@@ -421,7 +422,9 @@ def start_wallpaper_engine(wpid):
     config = load_config()
 
     creation_command = _build_creation_command(wpid, config, force_silent=False)
-    capture_command = _build_creation_command(wpid, config, force_silent=True)
+    capture_command = _build_creation_command(
+        wpid, config, force_silent=True, set_static=True
+    )
 
     logging.info(f"full command: {' '.join(creation_command)}")
 
