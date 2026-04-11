@@ -789,7 +789,7 @@ class App(tk.Tk):
         self.title("motionpaper")
         self.geometry(f"{width}x{height}")
         self.config = load_config()
-        self.config.setdefault("show_mature", True)
+        self.config.setdefault("show_mature", False)
         self.theme_name = self.config.get("theme", "purple")
         if self.theme_name not in THEMES:
             self.theme_name = "purple"
@@ -807,7 +807,9 @@ class App(tk.Tk):
         self.previewed_wpid = None
         self.applied_wpid = self.config.get("wpid")
         self.refreshing_wallpapers = False
-        self.show_mature_var = tk.BooleanVar(value=self.config.get("show_mature", True))
+        self.show_mature_var = tk.BooleanVar(
+            value=self.config.get("show_mature", False)
+        )
         self.sidebar_gif_frames = []
         self.sidebar_current_frame = 0
         self.sidebar_animating = False
@@ -1627,6 +1629,7 @@ class App(tk.Tk):
     def apply_theme(self, theme_name):
         if theme_name not in THEMES:
             theme_name = "purple"
+            self.show_toast("theme not found")
         self.theme_name = theme_name
         self.theme = THEMES[theme_name]
         self.config["theme"] = theme_name
@@ -1709,9 +1712,9 @@ class App(tk.Tk):
         self.display_wallpapers()
         self.update_side_panel()
 
-        if self.settings_screen:
-            self.settings_screen.destroy()
-            self.settings_screen = None
+        # if self.settings_screen:
+        #     self.settings_screen.destroy()
+        #     self.settings_screen = None
 
     def _on_mousewheel(self, event):
         scroll_amount = 2
